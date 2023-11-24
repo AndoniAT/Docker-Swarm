@@ -1,0 +1,15 @@
+version: '2'
+services:
+  web:
+    image: node:20
+    container_name: TP4_Docker_Swarm
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - "3000:3000"
+    command:  bash -c "npm install && npm start"
+  slaves:
+    image: servuc/hash_extractor
+    ports:
+      - "7000:7000"
