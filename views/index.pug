@@ -1,5 +1,52 @@
-extends layout
-
-block content
-  h1= title
-  p Welcome to #{title}
+doctype html
+head
+  meta(charset='UTF-8')
+  meta(name='viewport' content='width=device-width, initial-scale=1.0')
+  title Application de Requ&ecirc;tes
+  style.
+    body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    margin: 20px;
+    }
+    label {
+    margin-right: 10px;
+    }
+    button {
+    padding: 10px;
+    margin-top: 10px;
+    cursor: pointer;
+    }
+h2 Application de Requ&ecirc;tes
+label(for='endpoint') Endpoint URL:
+input#endpoint(type='text' placeholder="Entrez l'URL de l'endpoint" style='width: 300px;')
+br
+label(for='mode') Mode:
+select#mode
+  option(value='gentil') Gentil
+  option(value='normal' selected='') Normal
+  option(value='agressif') Agressif
+br
+button(onclick='sendRequest()') Envoyer la Requ&ecirc;te
+script.
+  function sendRequest() {
+  const endpoint = document.getElementById('endpoint').value;
+  const mode = document.getElementById('mode').value;
+  // Vous pouvez utiliser ici fetch() pour envoyer une requête HTTP ou WebSocket pour WebSocket
+  // Exemple avec fetch() pour une requête HTTP
+  fetch(endpoint, {
+  method: 'POST', // ou 'GET' selon votre besoin
+  headers: {
+  'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ mode: mode }),
+  })
+  .then(response => response.json())
+  .then(data => {
+  // Gérer la réponse de la requête ici
+  console.log('Réponse:', data);
+  })
+  .catch(error => {
+  console.error('Erreur:', error);
+  });
+  }
