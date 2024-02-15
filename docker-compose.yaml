@@ -1,15 +1,21 @@
 version: '2'
 services:
+  mongo:
+    image: mongo
+    networks:
+      - swarm
   web:
     image: node:20
     container_name: TP4_Docker_Swarm
     working_dir: /app
+    networks:
+      - swarm
     volumes:
       - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "3000:3000"
     command:  bash -c "npm install && npm start"
-  slaves:
-    image: servuc/hash_extractor
-    ports:
-      - "7000:7000"
+  
+networks:
+  swarm:

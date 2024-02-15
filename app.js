@@ -9,6 +9,15 @@ var usersRouter = require('./routes/users');
 
 var app = express();
 
+const PORT = 3000;
+
+/**
+ * == MODELS ==
+ */
+const hash = require('./models/hash');
+const Slave  = require('./models/slave');
+
+
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
