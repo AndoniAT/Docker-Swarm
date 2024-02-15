@@ -17,6 +17,7 @@ const PORT = 3000;
 const hash = require('./models/hash');
 const Slave  = require('./models/slave');
 
+Slave.init(); // Initialiser swarm
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));

@@ -5,7 +5,9 @@ services:
     networks:
       - swarm
   web:
-    image: node:20
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: TP4_Docker_Swarm
     working_dir: /app
     networks:
@@ -15,7 +17,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "3000:3000"
-    command:  bash -c "npm install && npm start"
+    command:  bash -c "npm install && npm start &&  docker pull docker"
   
 networks:
   swarm:
