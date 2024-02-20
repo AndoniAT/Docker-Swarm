@@ -3,6 +3,8 @@ var express = require('express');
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
+var moment = require('moment');
+const HASH = require('./models/hash');
 //const mongoURL = "mongodb://mongo:27017";
 const mongoURL = "mongodb://mongo:27017/swarm";
 const mongoose = require('mongoose');
@@ -26,8 +28,8 @@ const mongoose = require('mongoose');
 
     setTimeout(() => { 
       console.log('DECRYPTER =============> ');
-      let word = Slave.generateHASH( 'chien' );
-      Slave.decryptHASH( HASH_C, word ); 
+      let word = Slave.generateHASH( 'ZET9' );
+      Slave.decryptHASH( word ); 
     }, 10000
     );
 
@@ -48,8 +50,6 @@ var usersRouter = require('./routes/users');
 var app = express();
 const expressWs = require('express-ws')(app);
 var searchActive = true;
-
-var HASH_C = [];
 
 const PORT = 3000;
 
@@ -105,9 +105,13 @@ const messgaeSlave = ( ws, msg ) => {
     case TYPEMESSAGESLAVE.found :
       console.log('== TYPE FOUND ==');
       console.log( 'Message recu du slave => ', msg );
-      let hash = msg.split( ' ' )[1];
-      let solution = msg.split( ' ' )[2];
-      //hashFound( hash, solution );
+      let message = msg.split( ' ' );
+      let hash = message[ 1 ];
+      let solution = message[ 2 ];
+      console.log(`HASH [ ${hash} ] ======= SOLUTION [${solution} ]`);
+      
+      // Sauvegarder dans la base de données.
+      hashFound( hash, solution );
       break;
   }
 
@@ -134,9 +138,11 @@ app.ws( '/echo', ( ws, req ) => {
  * Si le hash a été trouvé, sauvegarder le hash et la solution
  */
 function hashFound( hash, solution ) {
-  /*let hashMongoose = new hashModel( { hash: hash, solution: solution } );
-  hashMongoose.save( ( err ) => { console.log( err ? err : `New hash : ${hash} => solution : ${solution}` ); } );
-  Slave.stopSearchHash( HASH_C, solution );*/
+  let date = moment().toISOString();
+  let hashMongoose = new HASH( { hash: hash, solution: solution, date_found: date } );
+  hashMongoose.save( ( err ) => { console.log( err ? err : `Saved : Hash [ ${hash} ] ====== Solution [ ${solution} ] ======== Date [ ${date} ]` ); } );
+  Slave.decryptState = false;
+  Slave.stopSearchHash( hash );
 }
 
 function createSlave( ws ) {

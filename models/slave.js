@@ -5,13 +5,13 @@ const crypto = require('crypto');
 
 
 class Slave {
-    static number = 2;
+    static number = 5;
     static slaves = [];
     static IP = '127.0.0.1';
 
-
+    static decryptState = false;
     static hashLength = 8;
-    static charHASH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    static HASH_SEARCHING = [];
 
     name = null;
     ws = null;
@@ -97,7 +97,8 @@ class Slave {
 
     static scaleSlaves( nb ) {
         console.log( ' == SCALE == ' );
-        exec( `docker service scale slaves=${Slave.slaves.length + nb}`, ( err ) => console.log( err ? `Error : ${err}` : `Total slaves + slaves removed => ${Slave.slaves.length + nb}` ) );
+        let currentSlaves = Slave.slaves.length;
+        exec( `docker service scale slaves=${currentSlaves + nb}`, ( err ) => console.log( err ? `Error : ${err}` : `Total : Slaves [ ${currentSlaves} ] + Scale slaves [ ${nb} ] ==> Total [ ${ currentSlaves + nb } ]` ) );
     }
 
     /**
@@ -106,8 +107,6 @@ class Slave {
     static generateHASH( word ) {
         var result = crypto.createHash( 'md5' ).update( word ).digest( 'hex' );
         console.log(`Generate MD5 : WORD [ ${word} ] ====== HASH [ ${ result } ]`);
-        
-        //for ( let i = 0; i < Slave.hashLength; i++) result += Slave.charHASH.charAt( Math.floor( Math.random() * Slave.charHASH.length ) );
 
         exec("echo -n " + result + " | md5sum", 
         ( err, stdout ) => {
@@ -122,18 +121,18 @@ class Slave {
     /**
      * Decrypter le hash et l'envoyer aux clients
      * @param {} cli 
-     * @param {*} hash_c 
-     * @param {*} newHash 
+     * @param {*} hashedWord 
      */
-    static decryptHASH( hash_c, newHash ) {
-        console.log('Current Hash  => ', hash_c);
-        console.log('Decript Hash => ', newHash);
-        HASH.findOne( { hash: newHash }, function (err, obj) {
+    static decryptHASH( hashedWord ) {
+        console.log('Current Hashes  => ', Slave.HASH_SEARCHING );
+        console.log('Decript Hash => ', hashedWord);
+        HASH.findOne( { hash: hashedWord }, function (err, obj) {
             if( err ) {
                 console.log( "Error =>>>> ", err );
             }
 
             if ( obj ) {
+                console.log( 'HASH déjà enregistré : ', obj );
                 /**
                  * ENVOYER HASH TROUVE
                  */
@@ -142,48 +141,57 @@ class Slave {
                 Slave.shutDownInactives();
                 let unactives =  Slave.slaves.filter( s => !s.active );
                 console.log("Checking slaves => ", Slave.slaves.map( s => s ? s.name : null ));
-                hash_c[ newHash ] = [];
+                Slave.HASH_SEARCHING[ hashedWord ] = [];
                 for ( let i = 0; i < Slave.number && unactives.length > 0; i++ ) {
                     let current_slave = unactives[ i ];
-                    console.log('Current slave => ', current_slave.name ?? current_slave );
-
-                    let limit = ( i == 0 ) ? [ "a*", "E*" ] : ( i == 1 ) ? [ "F*", "9*" ] : [ "a*", "9*" ];
+                    let limit = [ "a*", "9*" ];
 
                     // SEARCH HASH
-                    //console.log(`search this ws ======> ${newHash} ${limit[0]} ${limit[1]}` );
-                    console.log(`search this ws ======> ${newHash} a 99999` );
+                    console.log(`Slave ${current_slave.name} => search this ws ======> ${hashedWord} ${limit[0]} ${limit[1]}` );
+                    //console.log(`search this ws ======> ${hashedWord} a 99999` );
                     console.log(`Ready ? ${current_slave.ws.readyState}`);
-                    //current_slave.ws.send(`search ${newHash} ${limit[0]} ${limit[1]}` );
-                    current_slave.ws.send( `search ${newHash} a 99999`,  error => {
+                    current_slave.ws.send(`search ${hashedWord} ${limit[0]} ${limit[1]}`, error => {
+                    //current_slave.ws.send( `search ${hashedWord} a 99999`,  error => {
                         if (error) {
-                          console.error('Erreur d\'envoi du message:', error);
+                            console.error('Erreur d\'envoi du message:', error);
                         } else {
-                          console.log('Message envoyé avec succès');
+                            Slave.decryptState = true;
+                            Slave.updateSearchMessage();
+                            console.log('Message envoyé avec succès');
                         }
-                      } );
-
+                    } );
                     current_slave.active = true; // activer slave
-                    console.log( `${newHash} pour slave => ${current_slave.name ?? current_slave}` );
+                    console.log( `${hashedWord} pour slave => ${current_slave.name ?? current_slave}` );
 
-                    hash_c[ newHash ].push( current_slave );
+                    Slave.HASH_SEARCHING[ hashedWord ].push( current_slave );
                 }
             }
         } );
     }
 
+    static updateSearchMessage() {
+        if( Slave.decryptState ) {
+            setTimeout( () => {
+                console.log( 'Search... => ', Slave.decryptState );
+                Slave.updateSearchMessage()
+            }, 2000 );
+        }
+    }
+
     /**
      * Arrete la recherche du hash
      */
-    static stopSearchHash( hash_c, hash ) {
-        if ( hash in hash_c ) {
-            for ( let slave of hash_c[ hash ] ) {
-                console.log( `Arret su slave => ${slave.name}` );
+    static stopSearchHash( hash ) {
+        if ( Slave.HASH_SEARCHING[ hash ] ) {
+            console.log( ` == STOP SLAVES SEARCHING FOR ${hash} ( ${Slave.HASH_SEARCHING[ hash ].length } Slaves )== ` );
+            Slave.HASH_SEARCHING[ hash ].forEach( slave => {
+                console.log( `Arret du slave => ${slave.name}` );
                 slave.ws.send( 'stop' );
                 slave.ws.send( 'exit' );
-            }
-            
-            delete hashCurrent[ hash ];
+            } );
+            delete Slave.HASH_SEARCHING[ hash ];
         }
+        Slave.updateSearchMessage();
     }
 }
 
