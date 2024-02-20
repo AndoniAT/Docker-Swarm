@@ -4,8 +4,43 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 //const mongoURL = "mongodb://mongo:27017";
-//const mongoose = require('mongoose');
-//mongoose.connect( `${mongoURL}/swarm` );
+const mongoURL = "mongodb://mongo:27017/swarm";
+const mongoose = require('mongoose');
+//mongoose.connect( mongoURL );
+
+
+
+(async () => {
+  console.log(' == TRY TO CONNECT ==' );
+  try {
+    console.log(mongoURL)
+    // Connexion à la base de données MongoDB
+    await mongoose.connect(mongoURL, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+
+    // Si la connexion réussit
+    console.log('\n\n ======= Connexion à MongoDB réussie ====================== \n\n');
+
+
+    setTimeout(() => { 
+      console.log('DECRYPTER =============> ');
+      let word = Slave.generateHASH( 'chien' );
+      Slave.decryptHASH( HASH_C, word ); 
+    }, 10000
+    );
+
+  } catch (error) {
+    // En cas d'échec de connexion
+    console.error('Erreur de connexion à MongoDB :', error.message);
+    //lever une exception
+
+    throw new Error('Impossible de se connecter à la base de données MongoDB', error);
+  }
+})();
+
+
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
@@ -14,8 +49,6 @@ var app = express();
 const expressWs = require('express-ws')(app);
 var searchActive = true;
 
-var TOTSLAVES = 0;
-var SLAVESCOLLECTION = [];
 var HASH_C = [];
 
 const PORT = 3000;
@@ -62,26 +95,38 @@ const TYPEMESSAGESLAVE = { slave : 'slave', found : 'found' };
 
 const messgaeSlave = ( ws, msg ) => {
   console.log('=== SLAVE MESSAGE ====')
-  console.log( 'Message recu du slave => ', msg );
   const type = msg.split( ' ' )[ 0 ];
   switch(type) {
     case TYPEMESSAGESLAVE.slave : 
-      createSlave( ws );
+    console.log('== TYPE SLAVE ==');
+    console.log( 'Message recu du slave => ', msg );
+    createSlave( ws );
     break
     case TYPEMESSAGESLAVE.found :
+      console.log('== TYPE FOUND ==');
+      console.log( 'Message recu du slave => ', msg );
       let hash = msg.split( ' ' )[1];
       let solution = msg.split( ' ' )[2];
-      hashFound( hash, solution );
-    break
+      //hashFound( hash, solution );
+      break;
   }
 
 };
 
 //app.ws( '/cli', ( ws, req ) => {  ws.on( 'message', msg => { messageClient( msg ); } ); } );
 
+
 app.ws( '/slaves', ( ws, req ) => {  
   console.log('== GET SLAVES ==' );
   ws.on( 'message', msg => { messgaeSlave( ws, msg ); } ); 
+} );
+
+app.ws( '/echo', ( ws, req ) => {
+  ws.on('message', (msg) => {
+      console.log( '== ECHO ==' );
+      console.log( msg );
+      ws.send( msg );
+  } );
 } );
 
 
@@ -95,10 +140,10 @@ function hashFound( hash, solution ) {
 }
 
 function createSlave( ws ) {
-  let name = `slave_${SLAVESCOLLECTION.length}`;
+  let name = `slave_${Slave.slaves.length}`;
   let slave = new Slave( name, ws, false );
   console.log('Creation slave =>', slave.name);
-  SLAVESCOLLECTION.push(slave);
+  Slave.slaves.push(slave);
 }
 
 // view engine setup

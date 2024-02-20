@@ -1,6 +1,7 @@
 
 const { exec } = require('child_process');
-const hash = require('./hash');
+const HASH = require('./hash');
+const crypto = require('crypto');
 
 
 class Slave {
@@ -66,14 +67,8 @@ class Slave {
         exec( `docker service create --restart-condition='none' --network='host' --name slaves --replicas ${Slave.number} servuc/hash_extractor ./hash_extractor s ws://${Slave.IP}:3000/slaves`,
             ( err ) => {
                 if (err) console.error(`error: ${err}`);
-                else {
-                    console.log(' == INIT == ')
-                    setInterval( () => {
-                        console.log( '== SHUT DOWN INACTIVES ==' )
-                        Slave.shutDownInactives();
-                    }, 6000);
-                }
-        });
+                else setInterval( () => Slave.shutDownInactives(), 6000);
+        } );
     }
 
     
@@ -81,6 +76,7 @@ class Slave {
      * Arreter inactives
      */
     static shutDownInactives() {
+        console.log( '== SHUT DOWN INACTIVES ==' )
         let unactives =  Slave.slaves.filter( s => !s.active );
         
         if ( unactives.length < Slave.number ) {
@@ -88,27 +84,30 @@ class Slave {
             Slave.scaleSlaves( scaleNum );
         } else {
             for ( let i = 0; i < unactives.length - Slave.number; i++ ) {
-                console.log( `Shutdown slave : ${slave.name}` );
                 let slave = unactives[i];
+                console.log( `Shutdown slave : ${slave.name}` );
                 slave.ws.send( Slave.messages.exit );
                 
                 // enlever l'esclave inactive dde la liste des esclaves
-                slaves = slaves.filter( s => s !== slave );
+                Slave.slaves = Slave.slaves.filter( s => s !== slave );
             }
+            console.log('SLAVES NEW => ' + Slave.slaves.map(s => s ? s.name : null ));
         }
     }
 
     static scaleSlaves( nb ) {
-        console.log('==SCALE==');
-        exec( `docker service scale slaves=${Slave.slaves.length + nb}`, ( err ) => console.log( err ? `Error : ${err}` : `Total slaves => ${Slave.slaves.length + nb}` ) );
+        console.log( ' == SCALE == ' );
+        exec( `docker service scale slaves=${Slave.slaves.length + nb}`, ( err ) => console.log( err ? `Error : ${err}` : `Total slaves + slaves removed => ${Slave.slaves.length + nb}` ) );
     }
 
     /**
      * MD5
      */
-    static generateHASH() {
-        var result = '';
-        for ( let i = 0; i < Slave.hashLength; i++) result += Slave.charHASH.charAt( Math.floor( Math.random() * Slave.charHASH.length ) );
+    static generateHASH( word ) {
+        var result = crypto.createHash( 'md5' ).update( word ).digest( 'hex' );
+        console.log(`Generate MD5 : WORD [ ${word} ] ====== HASH [ ${ result } ]`);
+        
+        //for ( let i = 0; i < Slave.hashLength; i++) result += Slave.charHASH.charAt( Math.floor( Math.random() * Slave.charHASH.length ) );
 
         exec("echo -n " + result + " | md5sum", 
         ( err, stdout ) => {
@@ -126,13 +125,12 @@ class Slave {
      * @param {*} hash_c 
      * @param {*} newHash 
      */
-    static decryptHASH( cli, hash_c, newHash ) {
-        newHash = newHash ?? Slave.generateHASH();
-        
-        hash.findOne( { hash: newHash }, function (err, obj) {
+    static decryptHASH( hash_c, newHash ) {
+        console.log('Current Hash  => ', hash_c);
+        console.log('Decript Hash => ', newHash);
+        HASH.findOne( { hash: newHash }, function (err, obj) {
             if( err ) {
-                console.log( err );
-                return
+                console.log( "Error =>>>> ", err );
             }
 
             if ( obj ) {
@@ -141,6 +139,34 @@ class Slave {
                  */
             } else {
                 //
+                Slave.shutDownInactives();
+                let unactives =  Slave.slaves.filter( s => !s.active );
+                console.log("Checking slaves => ", Slave.slaves.map( s => s ? s.name : null ));
+                hash_c[ newHash ] = [];
+                for ( let i = 0; i < Slave.number && unactives.length > 0; i++ ) {
+                    let current_slave = unactives[ i ];
+                    console.log('Current slave => ', current_slave.name ?? current_slave );
+
+                    let limit = ( i == 0 ) ? [ "a*", "E*" ] : ( i == 1 ) ? [ "F*", "9*" ] : [ "a*", "9*" ];
+
+                    // SEARCH HASH
+                    //console.log(`search this ws ======> ${newHash} ${limit[0]} ${limit[1]}` );
+                    console.log(`search this ws ======> ${newHash} a 99999` );
+                    console.log(`Ready ? ${current_slave.ws.readyState}`);
+                    //current_slave.ws.send(`search ${newHash} ${limit[0]} ${limit[1]}` );
+                    current_slave.ws.send( `search ${newHash} a 99999`,  error => {
+                        if (error) {
+                          console.error('Erreur d\'envoi du message:', error);
+                        } else {
+                          console.log('Message envoyé avec succès');
+                        }
+                      } );
+
+                    current_slave.active = true; // activer slave
+                    console.log( `${newHash} pour slave => ${current_slave.name ?? current_slave}` );
+
+                    hash_c[ newHash ].push( current_slave );
+                }
             }
         } );
     }
@@ -159,7 +185,6 @@ class Slave {
             delete hashCurrent[ hash ];
         }
     }
-
 }
 
 module.exports = Slave;
