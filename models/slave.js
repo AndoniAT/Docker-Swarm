@@ -12,16 +12,18 @@ class Slave {
     static hashLength = 8;
     static charHASH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
-    name = ws = active = null;
+    name = null;
+    ws = null;
+    active = null;
     
     static messages = {
         exit: 'exit'
     }
 
-    constructor(name, ws) {
+    constructor(name, ws, active ) {
         this.name = name;
         this.ws = ws;
-        this.active = false;
+        this.active = active;
     }
 
     /**
@@ -30,7 +32,7 @@ class Slave {
     static init() {
         Slave.leaveSwarm().then( e => {
             console.log(' == DOCKER  SWARM == ');
-            exec( `docker swarm init --listen-addr ${Slave.IP}:2377 --advertise-addr 127.0.0.1`,
+            exec( `docker swarm init --advertise-addr ${Slave.IP}`,
             ( err ) => {
                 if (err) console.error(`error: ${err}`);
                 else Slave.createService();
@@ -59,7 +61,8 @@ class Slave {
      * Créer le service avec replicas
      */
     static createService() {
-        console.log( 'Creer services slaves' );
+        console.log( '== Creer services slaves ==' );
+
         exec( `docker service create --restart-condition='none' --network='host' --name slaves --replicas ${Slave.number} servuc/hash_extractor ./hash_extractor s ws://${Slave.IP}:3000/slaves`,
             ( err ) => {
                 if (err) console.error(`error: ${err}`);
@@ -96,6 +99,7 @@ class Slave {
     }
 
     static scaleSlaves( nb ) {
+        console.log('==SCALE==');
         exec( `docker service scale slaves=${Slave.slaves.length + nb}`, ( err ) => console.log( err ? `Error : ${err}` : `Total slaves => ${Slave.slaves.length + nb}` ) );
     }
 
