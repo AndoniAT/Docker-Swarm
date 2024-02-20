@@ -3,11 +3,19 @@ var express = require('express');
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
+const mongoURL = "mongodb://mongo:27017";
+const mongoose = require('mongoose');
+mongoose.connect( `${mongoURL}/swarm` );
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 
 var app = express();
+var searchActive = true;
+
+var TOTSLAVES = 0;
+var SLAVESCOLLECTION = [];
+var HASH_C = [];
 
 const PORT = 3000;
 
@@ -19,6 +27,75 @@ const Slave  = require('./models/slave');
 
 Slave.init(); // Initialiser swarm
 
+/**
+ * WEBSOCKET
+ */
+//require('express-ws')(app);
+
+/**
+ * Message envoyé par le client
+ */
+/*const MODES = {
+  easy: 'easy', 
+  medium: 'medium', 
+  insane: 'insane'
+} 
+
+const messageClient = ( msg ) => {
+  console.log( 'Message du client => ', msg );
+  const mode = msg.split( ' ' )[0];
+  
+  const decryptWithTime = ( time ) => {
+    setTimeout( () => { decryptMD5Hash(clients, hashCurrent) }, time );
+    if(searchActive) decryptWithTime(time);
+  }
+
+  switch( mode ) {
+    case MODES.easy :
+      decryptWithTime( 60 );
+      break
+    
+  }
+};
+
+const TYPEMESSAGESLAVE = { slave : 'slave', found : 'found' };
+
+
+const messgaeSlave = ( msg ) => {
+  console.log( 'Message recu du slave => ', msg );
+  const type = msg.split( ' ' )[ 0 ];
+  switch(type) {
+    case TYPEMESSAGESLAVE.slave : 
+      createSlave();
+    break
+    case TYPEMESSAGESLAVE.found :
+      let hash = msg.split( ' ' )[1];
+      let solution = msg.split( ' ' )[2];
+      hashFound( hash, solution );
+    break
+  }
+
+};
+
+app.ws( '/cli', ( ws, req ) => {  ws.on( 'message', msg => { messageClient( msg ); } ); } );
+app.ws( '/slaves', ( ws, req ) => {  ws.on( 'message', msg => { messgaeSlave( msg ); } ); } );
+*/
+
+/**
+ * Si le hash a été trouvé, sauvegarder le hash et la solution
+ */
+/*function hashFound( hash, solution ) {
+  let hashMongoose = new hashModel( { hash: hash, solution: solution } );
+  hashMongoose.save( ( err ) => { console.log( err ? err : `New hash : ${hash} => solution : ${solution}` ); } );
+  Slave.stopSearchHash( HASH_C, solution );
+}
+
+function createSlave() {
+  let name = `slave_${SLAVESCOLLECTION.length}`;
+  let slave = new Slave( name, ws );
+  SLAVESCOLLECTION.push(slave);
+}
+*/
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
