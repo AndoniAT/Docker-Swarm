@@ -5,11 +5,13 @@ const crypto = require('crypto');
 
 
 class Slave {
-    static number = 5;
+    static number = 2;
     static slaves = [];
     static IP = '127.0.0.1';
 
+    static devryptModeState = true;
     static decryptState = false;
+
     static hashLength = 8;
     static HASH_SEARCHING = [];
 
@@ -78,7 +80,7 @@ class Slave {
     static shutDownInactives() {
         console.log( '== SHUT DOWN INACTIVES ==' )
         let unactives =  Slave.slaves.filter( s => !s.active );
-        
+        console.log('check actives => ', Slave.slaves.map( s => s.active ));
         if ( unactives.length < Slave.number ) {
             let scaleNum = Slave.number - unactives.length;
             Slave.scaleSlaves( scaleNum );
@@ -136,34 +138,41 @@ class Slave {
                 /**
                  * ENVOYER HASH TROUVE
                  */
+                Slave.stopSearchHash( hashedWord );
             } else {
-                //
-                Slave.shutDownInactives();
-                let unactives =  Slave.slaves.filter( s => !s.active );
                 console.log("Checking slaves => ", Slave.slaves.map( s => s ? s.name : null ));
-                Slave.HASH_SEARCHING[ hashedWord ] = [];
-                for ( let i = 0; i < Slave.number && unactives.length > 0; i++ ) {
-                    let current_slave = unactives[ i ];
-                    let limit = [ "a*", "9*" ];
+                let inactives = Slave.slaves.filter( s => !s.active );
+                inactives = inactives.slice(0, Slave.number); // prendre juste deux inactives
 
-                    // SEARCH HASH
-                    console.log(`Slave ${current_slave.name} => search this ws ======> ${hashedWord} ${limit[0]} ${limit[1]}` );
-                    //console.log(`search this ws ======> ${hashedWord} a 99999` );
-                    console.log(`Ready ? ${current_slave.ws.readyState}`);
-                    current_slave.ws.send(`search ${hashedWord} ${limit[0]} ${limit[1]}`, error => {
-                    //current_slave.ws.send( `search ${hashedWord} a 99999`,  error => {
-                        if (error) {
-                            console.error('Erreur d\'envoi du message:', error);
+                // Chercher juste avec deux inactives
+                if( inactives.length > 0 && Slave.devryptModeState ) {
+                    inactives.forEach( current_slave => {
+                        current_slave.active = true; // activer slave
+                        let limit = [ "a*", "9*" ];
+        
+                        // SEARCH HASH
+                        console.log(`Slave ${current_slave.name} => search this ws ======> ${hashedWord} ${limit[0]} ${limit[1]}` );
+                        //console.log(`search this ws ======> ${hashedWord} a 99999` );
+                        console.log(`Ready ? ${current_slave.ws.readyState}`);
+                        current_slave.ws.send(`search ${hashedWord} ${limit[0]} ${limit[1]}`, error => {
+                        //current_slave.ws.send( `search ${hashedWord} a 99999`,  error => {
+                            if (error) {
+                                console.error('Erreur d\'envoi du message:', error);
+                            } else {
+                                Slave.decryptState = true;
+                                Slave.updateSearchMessage();
+                                console.log('Message envoyé avec succès');
+                            }
+                        } );
+                        console.log( `${hashedWord} pour slave => ${current_slave.name ?? current_slave}` );
+                        if( Slave.HASH_SEARCHING[ hashedWord ] ) {
+                            Slave.HASH_SEARCHING[ hashedWord ].push( current_slave );
                         } else {
-                            Slave.decryptState = true;
-                            Slave.updateSearchMessage();
-                            console.log('Message envoyé avec succès');
+                            Slave.HASH_SEARCHING[ hashedWord ] = [ current_slave ];
                         }
                     } );
-                    current_slave.active = true; // activer slave
-                    console.log( `${hashedWord} pour slave => ${current_slave.name ?? current_slave}` );
-
-                    Slave.HASH_SEARCHING[ hashedWord ].push( current_slave );
+                } else {
+                    Slave.stopSearchHash( hashedWord );
                 }
             }
         } );
@@ -182,14 +191,19 @@ class Slave {
      * Arrete la recherche du hash
      */
     static stopSearchHash( hash ) {
+        Slave.decryptState = false;
+        Slave.devryptModeState = false;
+
         if ( Slave.HASH_SEARCHING[ hash ] ) {
             console.log( ` == STOP SLAVES SEARCHING FOR ${hash} ( ${Slave.HASH_SEARCHING[ hash ].length } Slaves )== ` );
             Slave.HASH_SEARCHING[ hash ].forEach( slave => {
                 console.log( `Arret du slave => ${slave.name}` );
+                slave.active = false;
                 slave.ws.send( 'stop' );
                 slave.ws.send( 'exit' );
             } );
             delete Slave.HASH_SEARCHING[ hash ];
+            Slave.shutDownInactives();
         }
         Slave.updateSearchMessage();
     }

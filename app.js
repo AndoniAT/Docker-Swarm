@@ -5,12 +5,23 @@ var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var moment = require('moment');
 const HASH = require('./models/hash');
-//const mongoURL = "mongodb://mongo:27017";
 const mongoURL = "mongodb://mongo:27017/swarm";
 const mongoose = require('mongoose');
-//mongoose.connect( mongoURL );
 
-
+const MODES = {
+  gentil: {
+    name: 'gentil',
+    time: 60
+  }, 
+  normal: {
+    name: 'normal',
+    time: 30
+  }, 
+  agressif: {
+    name: 'agressif',
+    time: 10
+  }
+};
 
 (async () => {
   console.log(' == TRY TO CONNECT ==' );
@@ -28,8 +39,9 @@ const mongoose = require('mongoose');
 
     setTimeout(() => { 
       console.log('DECRYPTER =============> ');
-      let word = Slave.generateHASH( 'ZET9' );
-      Slave.decryptHASH( word ); 
+      let word = Slave.generateHASH( 'chiem' );
+      decryptMode( MODES.gentil.name, word );
+      //Slave.decryptHASH( word ); 
     }, 10000
     );
 
@@ -66,21 +78,12 @@ const Slave  = require('./models/slave');
 /**
  * Message envoyé par le client
  */
-/*const MODES = {
-  easy: 'easy', 
-  medium: 'medium', 
-  insane: 'insane'
-} 
+/*
 
 const messageClient = ( msg ) => {
   console.log( 'Message du client => ', msg );
   const mode = msg.split( ' ' )[0];
   
-  const decryptWithTime = ( time ) => {
-    setTimeout( () => { decryptMD5Hash(clients, hashCurrent) }, time );
-    if(searchActive) decryptWithTime(time);
-  }
-
   switch( mode ) {
     case MODES.easy :
       decryptWithTime( 60 );
@@ -108,11 +111,16 @@ const messgaeSlave = ( ws, msg ) => {
       let message = msg.split( ' ' );
       let hash = message[ 1 ];
       let solution = message[ 2 ];
-      console.log(`HASH [ ${hash} ] ======= SOLUTION [${solution} ]`);
-      
-      // Sauvegarder dans la base de données.
-      hashFound( hash, solution );
-      break;
+      if(Slave.devryptModeState) {
+        console.log(`HASH [ ${hash} ] ======= SOLUTION [${solution} ]`);
+        
+        // Sauvegarder dans la base de données.
+        hashFound( hash, solution );
+        break;
+      } else {
+        console.log( '\n == ALREADY FOUND STOP ALL == \n' );
+        Slave.stopSearchHash( hash );
+      }
   }
 
 };
@@ -140,8 +148,7 @@ app.ws( '/echo', ( ws, req ) => {
 function hashFound( hash, solution ) {
   let date = moment().toISOString();
   let hashMongoose = new HASH( { hash: hash, solution: solution, date_found: date } );
-  hashMongoose.save( ( err ) => { console.log( err ? err : `Saved : Hash [ ${hash} ] ====== Solution [ ${solution} ] ======== Date [ ${date} ]` ); } );
-  Slave.decryptState = false;
+  hashMongoose.save( ( err ) => { console.log( err ? err : `\n\n === Saved : Hash [ ${hash} ] ====== Solution [ ${solution} ] ======== Date [ ${date} ] ===== \n\n ` ); } );
   Slave.stopSearchHash( hash );
 }
 
@@ -150,6 +157,35 @@ function createSlave( ws ) {
   let slave = new Slave( name, ws, false );
   console.log('Creation slave =>', slave.name);
   Slave.slaves.push(slave);
+}
+
+const CHECK_STATE_TIME = 10000;
+function decryptMode( mode, hash ) {
+  Slave.devryptModeState = true;
+
+  let dectypMsg = () => {
+    setTimeout( () => { 
+      console.log(`\n\n == Decrype Mode ${mode} => time ${MODES[ mode ].time} == \n\n`)
+      Slave.decryptHASH( hash );
+    }, 
+      MODES[ mode ].time
+    );
+  }
+
+  let checkState = () => {
+    console.log('== RUN CHECK STATE == ')
+    if( Slave.devryptModeState ) {
+      dectypMsg();
+
+      setTimeout( () => {
+        checkState();
+      }, CHECK_STATE_TIME );
+
+    }
+  }
+
+  checkState();
+
 }
 
 // view engine setup
