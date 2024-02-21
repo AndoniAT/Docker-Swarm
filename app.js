@@ -37,13 +37,13 @@ const MODES = {
     console.log('\n\n ======= Connexion à MongoDB réussie ====================== \n\n');
 
 
-    setTimeout(() => { 
+    /*setTimeout(() => { 
       console.log('DECRYPTER =============> ');
       let word = Slave.generateHASH( 'chiem' );
       decryptMode( MODES.gentil.name, word );
       //Slave.decryptHASH( word ); 
     }, 10000
-    );
+    );*/
 
   } catch (error) {
     // En cas d'échec de connexion
@@ -75,26 +75,7 @@ const Slave  = require('./models/slave');
  * WEBSOCKET
  */
 
-/**
- * Message envoyé par le client
- */
-/*
-
-const messageClient = ( msg ) => {
-  console.log( 'Message du client => ', msg );
-  const mode = msg.split( ' ' )[0];
-  
-  switch( mode ) {
-    case MODES.easy :
-      decryptWithTime( 60 );
-      break
-    
-  }
-};
-*/
-
 const TYPEMESSAGESLAVE = { slave : 'slave', found : 'found' };
-
 
 const messgaeSlave = ( ws, msg ) => {
   console.log('=== SLAVE MESSAGE ====')
@@ -125,22 +106,10 @@ const messgaeSlave = ( ws, msg ) => {
 
 };
 
-//app.ws( '/cli', ( ws, req ) => {  ws.on( 'message', msg => { messageClient( msg ); } ); } );
-
-
 app.ws( '/slaves', ( ws, req ) => {  
   console.log('== GET SLAVES ==' );
   ws.on( 'message', msg => { messgaeSlave( ws, msg ); } ); 
 } );
-
-app.ws( '/echo', ( ws, req ) => {
-  ws.on('message', (msg) => {
-      console.log( '== ECHO ==' );
-      console.log( msg );
-      ws.send( msg );
-  } );
-} );
-
 
 /**
  * Si le hash a été trouvé, sauvegarder le hash et la solution
@@ -200,6 +169,25 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter);
 app.use('/users', usersRouter);
+
+
+/**
+ * HTTP : Message envoyé par le client
+ */
+app.post('/client', function(req, res, next) {
+  let { mode, word } = req.body;
+  if( MODES[mode] ) {
+    word = Slave.generateHASH( word );
+    decryptMode( MODES[mode].name, word );
+  }
+  res.json(word);
+});
+
+app.get('/hashes', function(req, res, next) {
+  HASH.find({}).then( r => {
+    res.json(r);
+  });
+});
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
