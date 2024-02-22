@@ -30,7 +30,7 @@ function findHashes() {
     .catch(error => {
     console.error('Erreur:', error);
     });
-    setTimeout(findHashes, 10000 );
+    setTimeout(findHashes, 2000 );
 }
 function sendRequest() {
     const mode = $('#mode').val();

@@ -92,17 +92,11 @@ const messgaeSlave = ( ws, msg ) => {
       let message = msg.split( ' ' );
       let hash = message[ 1 ];
       let solution = message[ 2 ];
-      if(Slave.devryptModeState) {
-        console.log(`HASH [ ${hash} ] ======= SOLUTION [${solution} ]`);
-        
-        // Sauvegarder dans la base de données.
-        hashFound( hash, solution );
-        break;
-      } else {
-        console.log( '\n == ALREADY FOUND STOP ALL == \n' );
-        Slave.stopSearchHash( hash );
-      }
-  }
+      console.log(`HASH [ ${hash} ] ======= SOLUTION [${solution} ]`);
+      
+      // Sauvegarder dans la base de données.
+      hashFound( hash, solution );
+    }
 
 };
 
@@ -115,10 +109,31 @@ app.ws( '/slaves', ( ws, req ) => {
  * Si le hash a été trouvé, sauvegarder le hash et la solution
  */
 function hashFound( hash, solution ) {
-  let date = moment().toISOString();
-  let hashMongoose = new HASH( { hash: hash, solution: solution, date_found: date } );
-  hashMongoose.save( ( err ) => { console.log( err ? err : `\n\n === Saved : Hash [ ${hash} ] ====== Solution [ ${solution} ] ======== Date [ ${date} ] ===== \n\n ` ); } );
-  Slave.stopSearchHash( hash );
+  if( Slave.devryptModeState ) {
+    let date = moment().toISOString();
+    let hashMongoose = new HASH( { hash: hash, solution: solution, date_found: date } );
+    hashMongoose.save( ( err ) => { 
+      console.log( err ? err : `\n\n === Saved : Hash [ ${hash} ] ====== Solution [ ${solution} ] ======== Date [ ${date} ] ===== \n\n ` ); 
+    } );
+    Slave.stopSearchHash( hash );
+  } else {
+    Slave.stopSearchHash( hash );
+  }
+
+
+  /*console.log( `Regenerate slaves` );
+  Slave.slaves.forEach( slave => {
+    slave.active = false;
+    slave.ws.send( 'stop' );
+    slave.ws.send( 'exit' );
+  } );
+  let num = Slave.slaves.length;
+  Slave.slaves = [];
+   for (let index = 0; index < Object.keys(Slave.HASH_SEARCHING).length; index++) {
+                const hash = Slave.HASH_SEARCHING[index];
+                delete Slave.HASH_SEARCHING[hash];
+  }*/
+  //Slave.scaleSlaves( Slave.number + num );
 }
 
 function createSlave( ws ) {
@@ -142,7 +157,7 @@ function decryptMode( mode, hash ) {
   }
 
   let checkState = () => {
-    console.log('== RUN CHECK STATE == ')
+    console.log(`== RUN CHECK STATE ==> Decrypt mode = ${Slave.devryptModeState}`);
     if( Slave.devryptModeState ) {
       dectypMsg();
 
@@ -175,11 +190,17 @@ app.use('/users', usersRouter);
  * HTTP : Message envoyé par le client
  */
 app.post('/client', function(req, res, next) {
+  console.log('init');
   let { mode, word } = req.body;
-  if( MODES[mode] ) {
-    word = Slave.generateHASH( word );
-    decryptMode( MODES[mode].name, word );
-  }
+  word = Slave.generateHASH( word );
+
+  Slave.init().then( () => {
+    if( MODES[mode] ) {
+      console.log('=== REQUEST CLIENT DECRYPT ======');
+      decryptMode( MODES[mode].name, word );
+    }
+  });
+
   res.json(word);
 });
 
@@ -204,8 +225,6 @@ app.use(function(err, req, res, next) {
   res.status(err.status || 500);
   res.render('error');
 });
-
-Slave.init(); // Initialiser swarm
 
 const server = app.listen(PORT, () => {
   console.log(`App listening at http://localhost:${PORT}`);
