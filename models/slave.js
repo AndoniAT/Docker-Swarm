@@ -5,6 +5,7 @@ const crypto = require('crypto');
 
 
 class Slave {
+    static currentMode = null;
     static number = 2;
     static slaves = [];
     static IP = '127.0.0.1';
@@ -12,9 +13,12 @@ class Slave {
     static devryptModeState = true;
     static decryptState = false;
 
+    static numberIncrement = false;
     static hashLength = 8;
     static HASH_SEARCHING = [];
     static shutDownInterval = null;
+
+    static startTime = null;
 
     name = null;
     ws = null;
@@ -35,9 +39,24 @@ class Slave {
      */
     static init() {
         console.log('== INIT==');
+        Slave.slaves.forEach( slave => {
+        if( slave.ws.readyState ) {
+            console.log( `Arret du slave => ${slave.name}` );
+            slave.active = false;
+            slave.ws.send( 'stop' );
+            slave.ws.send( 'exit' );
+            
+        }  
+        })
+        Slave.slaves = [];
+        Slave.HASH_SEARCHING = [];
+        Slave.numberIncrement = false;
+        Slave.number = 2;
+
         if( Slave.shutDownInterval ) {
             clearInterval(Slave.shutDownInterval);
         }
+
         console.log('clear interval');
         return new Promise( (resolve, reject) => {
             Slave.leaveSwarm().then( e => {
@@ -72,7 +91,7 @@ class Slave {
      * Créer le service avec replicas
      */
     static createService( next ) {
-        console.log( '== Creer services slaves ==' );
+        console.log( `== Creer services slaves ==> ${Slave.number}` );
 
         exec( `docker service create --restart-condition='none' --network='host' --name slaves --replicas ${Slave.number} servuc/hash_extractor ./hash_extractor s ws://${Slave.IP}:3000/slaves`,
             ( err ) => {
@@ -101,6 +120,7 @@ class Slave {
             console.log('Shut down - Scale ==> redimension');
             let scaleNum = Slave.number - unactivesOpen.length;
             Slave.scaleSlaves( scaleNum );
+            
         } else {
             for ( let i = 0; i < unactivesOpen.length - Slave.number; i++ ) {
                 let slave = unactivesOpen[i];
@@ -116,8 +136,12 @@ class Slave {
 
     static scaleSlaves( nb ) {
         let currentSlaves = Slave.slaves.length;
-        console.log( `== SCALE == => ${currentSlaves} + ${nb}` );
-        exec( `docker service scale slaves=${currentSlaves + nb}`, ( err ) => console.log( err ? `Error : ${err}` : `Total : Slaves [ ${currentSlaves} ] + Scale slaves [ ${nb} ] ==> Total [ ${ currentSlaves + nb } ]` ) );
+        if( currentSlaves < 60 ) {
+            console.log( `== SCALE == => ${currentSlaves} + ${nb}` );
+            exec( `docker service scale slaves=${currentSlaves + nb}`, ( err ) => console.log( err ? `Error : ${err}` : `Total : Slaves [ ${currentSlaves} ] + Scale slaves [ ${nb} ] ==> Total [ ${ currentSlaves + nb } ]` ) );
+        } else {
+            console.log('exedeed slaves');
+        }
     }
 
     /**
@@ -135,10 +159,13 @@ class Slave {
      * @param {*} hashedWord 
      */
     static decryptHASH( hashedWord ) {
-        console.log('Current Slaves  => ', Slave.slaves.map(s => s.name) );
-        console.log('Current Hashes  => ', Slave.HASH_SEARCHING );
+        console.log('Current Slaves  => ', Slave.slaves.map(s => `${s.name} - ${s.ws.readyState}`) );
+        //console.log('Current Hashes  => ', Slave.HASH_SEARCHING );
         console.log('Decript Hash => ', hashedWord);
-        HASH.findOne( { hash: hashedWord }, function (err, obj) {
+        HASH.findOne( { 
+            hash: hashedWord ,
+            'details.mode' : Slave.currentMode
+        }, function (err, obj) {
             if( err ) {
                 console.log( "Error =>>>> ", err );
             }
@@ -148,6 +175,7 @@ class Slave {
                 /**
                  * ENVOYER HASH TROUVE
                  */
+                Slave.HASH_SEARCHING[hashedWord] = Slave.slaves;
                 Slave.stopSearchHash( hashedWord );
             } else {
                 console.log("Checking slaves => ", Slave.slaves.map( s => s ? s.name : null ));
@@ -160,10 +188,12 @@ class Slave {
 
                 // Chercher juste avec deux inactives
                 let split = Slave.chars.split('');
-                let div = Math.round(split.length/openInactives.length);
+                let length = Slave.numberIncrement ? Slave.slaves.length : 2;
+                console.log('check Length => ', length);
+                let div = Math.ceil(split.length/length);
                 let sliceLength= split.slice(0, div).length;
 
-
+                
                 let newArr = {};
             
                 for (let index = 0, charPos = 0, count = 0 ; index < split.length; index++, count++) {
@@ -239,7 +269,7 @@ class Slave {
     static updateSearchMessage() {
         if( Slave.decryptState ) {
             setTimeout( () => {
-                console.log( 'Search... => ', Slave.decryptState );
+                //console.log( 'Search... => ', Slave.decryptState );
                 Slave.updateSearchMessage()
             }, 2000 );
         }

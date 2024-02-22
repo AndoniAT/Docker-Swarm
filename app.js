@@ -11,15 +11,18 @@ const mongoose = require('mongoose');
 const MODES = {
   gentil: {
     name: 'gentil',
-    time: 60
+    time: 15000,
+    numberSlaves : 2
   }, 
   normal: {
     name: 'normal',
-    time: 30
+    time: 10000,
+    numberSlaves : 3
   }, 
   agressif: {
     name: 'agressif',
-    time: 10
+    time: 5000,
+    numberSlaves : 4
   }
 };
 
@@ -110,15 +113,65 @@ app.ws( '/slaves', ( ws, req ) => {
  */
 function hashFound( hash, solution ) {
   if( Slave.devryptModeState ) {
-    let date = moment().toISOString();
-    let hashMongoose = new HASH( { hash: hash, solution: solution, date_found: date } );
-    hashMongoose.save( ( err ) => { 
-      console.log( err ? err : `\n\n === Saved : Hash [ ${hash} ] ====== Solution [ ${solution} ] ======== Date [ ${date} ] ===== \n\n ` ); 
-    } );
+    let start = Slave.startTime;
+    let end = moment();
+    console.log(`StartTime => ${start}`);
+    console.log(`EndTime => ${end}`);
+    let date = end.toISOString();
+    let duration = moment.duration(end.diff(start));
+    console.log(`Duration => ${duration}`);
+    
+    const h = Math.floor(duration.asHours());
+    const m = Math.floor(duration.asMinutes()) % 60;
+    const s = Math.floor(duration.asSeconds()) % 60;
+    const mil = Math.floor(duration.milliseconds());
+
+
+    let det = {
+      mode : Slave.currentMode,
+      time : `${h}:${m}:${s}:${mil}`,
+      date: date
+    };
+
+    HASH.findOne( { 
+      hash: hash
+    },
+    ( err, obj ) => {
+      if( obj ) {
+        // Update
+        let details = obj.details;
+        details.push( det );
+
+        HASH.updateOne( 
+          {
+            hash: hash
+          },
+          {
+            $set : {
+              details : details
+            }
+          },
+          ( err, result ) => { 
+          console.log( err ? err : `\n\n === Updated : Hash [ ${hash} ] ====== Solution [ ${solution} ] ========= Mode [ ${det.mode} ] ======== Time [ ${det.time} ] ======== Date [ ${det.date} ] ===== \n\n ` ); 
+        } );
+      } else {
+        let hashMongoose = new HASH( { 
+          hash: hash, solution: solution, 
+          details : [ det ]
+        } );
+
+        // Save
+        hashMongoose.save( ( err ) => { 
+          console.log( err ? err : `\n\n === Saved : Hash [ ${hash} ] ====== Solution [ ${solution} ] ========= Mode [ ${det.mode} ] ======== Time [ ${det.time} ] ======== Date [ ${det.date} ] ===== \n\n ` ); 
+        } );
+      }
+    }
+    );
     Slave.stopSearchHash( hash );
   } else {
     Slave.stopSearchHash( hash );
   }
+  Slave.leaveSwarm();
 
 
   /*console.log( `Regenerate slaves` );
@@ -143,11 +196,28 @@ function createSlave( ws ) {
   Slave.slaves.push(slave);
 }
 
-const CHECK_STATE_TIME = 10000;
+const CHECK_STATE_TIME = 5000;
 function decryptMode( mode, hash ) {
-  Slave.devryptModeState = true;
+  Slave.numberIncrement = false;
+  let interv = setInterval(() => {
+    if(!Slave.devryptModeState) {
+      MODES[mode].numberSlaves = 0;
+      clearInterval(interv);
+    } else {
+      if(!Slave.numberIncrement) {
+        Slave.numberIncrement = true;
+        Slave.number=MODES[mode].numberSlaves;
+      }
+      console.log(`\n\n == Decrype Mode ${mode} => time ${MODES[ mode ].time} == \n\n`)
+      Slave.decryptHASH( hash );
+      /*setTimeout( () => { 
+      }, 
+        MODES[ mode ].time
+      );*/
+    }
 
-  let dectypMsg = () => {
+  }, MODES[ mode ].time );
+  /*let dectypMsg = () => {
     setTimeout( () => { 
       console.log(`\n\n == Decrype Mode ${mode} => time ${MODES[ mode ].time} == \n\n`)
       Slave.decryptHASH( hash );
@@ -168,7 +238,7 @@ function decryptMode( mode, hash ) {
     }
   }
 
-  checkState();
+  checkState();*/
 
 }
 
@@ -196,8 +266,13 @@ app.post('/client', function(req, res, next) {
 
   Slave.init().then( () => {
     if( MODES[mode] ) {
+      Slave.startTime = moment();
+      Slave.currentMode = MODES[mode].name;
+      Slave.devryptModeState = true;
+      Slave.number=MODES[mode].numberSlaves;
+
       console.log('=== REQUEST CLIENT DECRYPT ======');
-      decryptMode( MODES[mode].name, word );
+      decryptMode( Slave.currentMode, word );
     }
   });
 
